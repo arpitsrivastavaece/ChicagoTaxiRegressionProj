@@ -1,0 +1,202 @@
+---
+output:
+  word_document: default
+  html_document: default
+---
+##Regresion Project
+
+#Setting up the environment
+```{r}
+rm(list=ls())
+library(readxl)
+library(rio)
+library(car)
+```
+
+#Importing Dataset
+
+```{r}
+population=import("/Users/siddharthrawat/Downloads/6304\ Regression\ Project\ Data.csv")
+colnames(population)=tolower(make.names(colnames(population)))
+attach(population)
+#converting payment_type to factor variable
+population$payment_type = as.factor(population$payment_type)
+```
+
+#Setting seed & creating sample
+
+```{r}
+set.seed(45775355)
+sample.taxi.data=population[sample(1:nrow(population),100,replace=FALSE),]
+names(sample.taxi.data)
+nrow(sample.taxi.data)
+ncol(sample.taxi.data)
+```
+
+#cleaning the sample data
+
+```{r}
+clean.taxi.data = subset(sample.taxi.data, trip_seconds>0)
+nrow(clean.taxi.data)
+ncol(clean.taxi.data)
+subset.taxi.data = subset(clean.taxi.data, select = c(trip_seconds,trip_miles,fare,tips, extras,tolls,trip_total))
+summary(subset.taxi.data)
+```
+
+#Summary & Density Plots
+
+```{r}
+attach(subset.taxi.data)
+plot (density(trip_seconds))
+plot (density(trip_miles))
+plot (density(fare))
+plot (density(tips))
+plot (density(tolls))
+plot (density(extras))
+plot (density(trip_total))
+#dropping tolls
+subset.taxi.data = subset(clean.taxi.data, select = c(trip_seconds,trip_miles,fare,tips, extras,trip_total))
+```
+
+
+#Correlation analysis of the continuous variables
+
+```{r}
+summary(clean.taxi.data$payment_type)
+```
+
+#Correlation analysis of the continuous variables
+
+```{r}
+#Select a subset of numeric variables for correlation analysis
+plot(subset.taxi.data)
+cor(subset.taxi.data)
+```
+
+#Correlation Matrix
+
+```{r}
+library(corrplot)
+xx=cor(subset.taxi.data)
+corrplot(xx,method="number")
+```
+
+
+#Initial Regression Model
+
+```{r}
+taxi.out=lm(fare~trip_seconds+trip_miles+payment_type, data = clean.taxi.data)
+summary(taxi.out)
+confint(taxi.out)
+```
+
+#Kitchen Sink Model
+
+```{r}
+clean.taxi.data$trip_seconds2=clean.taxi.data$trip_seconds^2
+clean.taxi.data$trip_miles2=clean.taxi.data$trip_miles^2
+clean.taxi.data$trip_seconds3=clean.taxi.data$trip_seconds^3
+clean.taxi.data$trip_miles3=clean.taxi.data$trip_miles^3
+clean.taxi.data$inter=clean.taxi.data$trip_seconds * clean.taxi.data$trip_miles
+taxi.out2=lm(fare~trip_seconds+trip_miles+trip_seconds2+trip_miles2+trip_seconds3+trip_miles3+payment_type+inter+tips+extras, data = clean.taxi.data)
+summary(taxi.out2)
+```
+
+#Stepwise Regression
+
+```{r}
+step(lm(fare~trip_seconds+trip_miles+trip_seconds2+trip_miles2+trip_seconds3+trip_miles3+payment_type, data = clean.taxi.data, direction = "both"))
+```
+
+#finalreg model
+
+```{r}
+taxi.finalreg=lm(fare~trip_seconds+trip_seconds2+trip_miles2, data = clean.taxi.data)
+summary(taxi.finalreg)
+```
+
+#LINE Conformity
+
+```{r}
+#Linearity
+new_subset=subset(clean.taxi.data,select=c("trip_seconds","trip_seconds2","trip_miles2"))
+plot(new_subset)
+
+#Normality
+qqnorm(taxi.finalreg$residuals,pch=19)
+qqline(taxi.finalreg$residuals,lwd=3,col="red")
+
+#Equality of Variances
+plot(taxi.finalreg$fitted.values,rstandard(taxi.finalreg),pch=19)
+abline(0,0,col="red",lwd=3)
+```
+
+#Leverage Points
+
+```{r}
+lev=hat(model.matrix(taxi.finalreg))
+plot(lev,pch=19)
+abline(3*mean(lev),0,col="red",lwd=3)
+```
+
+#Finding the Outlier
+
+```{r}
+outliers = clean.taxi.data[lev>(3*mean(lev)),]
+outliers
+```
+
+#Removing the outliers
+
+```{r}
+reduced.taxi.data=clean.taxi.data[-which(clean.taxi.data$taxi_id %in% outliers$taxi_id & clean.taxi.data$trip_seconds!=300),]
+```
+
+#And rerun the regression
+
+```{r}
+taxi.redreg=lm(fare~trip_seconds+trip_seconds2+trip_miles2, data = reduced.taxi.data)
+summary(taxi.redreg)
+stdresids=rstandard(taxi.redreg)
+#Linearity
+plot(reduced.taxi.data$fare,taxi.redreg$fitted.values,
+     pch=21,main="Actual Fare v. Fitted")
+abline(0,1,lwd=3,col="red")
+
+#Normality
+qqnorm(taxi.redreg$residuals,pch=21)
+qqline(taxi.redreg$residuals,lwd=3,col="red")
+
+#Equality of Variances
+plot(taxi.redreg$fitted.values,rstandard(taxi.redreg),pch=21)
+abline(0,0,col="red",lwd=3)
+
+```
+
+#Rerun the Model with new sample
+
+```{r}
+set.seed(45775360)
+sample.taxi.data2=population[sample(1:nrow(population),100,replace=FALSE),]
+names(sample.taxi.data2)
+```
+
+#cleaning the data
+```{r}
+clean.taxi.data2 = subset(sample.taxi.data2, trip_seconds>0)
+nrow(clean.taxi.data2)
+ncol(clean.taxi.data2)
+subset.taxi.data2 = subset(clean.taxi.data2, select = c(trip_seconds,trip_miles,fare,tips, extras,trip_total))
+```
+
+#finalreg model 2
+```{r}
+clean.taxi.data2$trip_seconds2=clean.taxi.data2$trip_seconds^2
+clean.taxi.data2$trip_miles2=clean.taxi.data2$trip_miles^2
+taxi.finalreg2=lm(fare~trip_seconds+trip_seconds2+trip_miles2, data = clean.taxi.data2)
+summary(taxi.finalreg2)
+```
+```{r}
+vif(taxi.finalreg2)
+vif(taxi.finalreg)
+```
